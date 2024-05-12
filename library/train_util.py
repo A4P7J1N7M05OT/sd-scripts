@@ -3265,6 +3265,19 @@ def add_training_arguments(parser: argparse.ArgumentParser, support_dreambooth: 
     )
 
     parser.add_argument(
+        "--timestep_weight",
+        type=int,
+        default=0,
+        help="Timestep values will use triangular distribution with mode of the set value, should be lower than max_timestep and higher than min_timestep. 0 is disabled and the default.",
+    )
+
+    parser.add_argument(
+        "--schedule_timesteps",
+        action="store_true",
+        help="Schedule timesteps by interpolation from min_timesteps to max_timesteps based on current step with (intended for) cosine and cosine_with_restarts schedulers, might work unexpectedly with warmup.",
+    )
+
+    parser.add_argument(
         "--lowram",
         action="store_true",
         help="enable low RAM optimization. e.g. load models to VRAM instead of RAM (for machines which have bigger VRAM than RAM such as Colab and Kaggle) / メインメモリが少ない環境向け最適化を有効にする。たとえばVRAMにモデルを読み込む等（ColabやKaggleなどRAMに比べてVRAMが多い環境向け）",
@@ -4878,13 +4891,43 @@ def save_sd_model_on_train_end_common(
             huggingface_util.upload(args, out_dir, "/" + model_name, force_sync_upload=True)
 
 
+def schedule_timesteps(max_calls, min_timestep, max_timestep, restarts=0, b_size=(1,)):
+    if not hasattr(schedule_timesteps, 'current_step'):
+        schedule_timesteps.current_step = 1
+        schedule_timesteps.max_calls_split = max_calls // (restarts + 1)
+
+    interpolation_factor = schedule_timesteps.current_step / schedule_timesteps.max_calls_split
+
+    # Calculate mode for the triangular distribution
+    mode = (max_timestep * interpolation_factor) + min_timestep
+
+    # Ensure mode does not exceed max_timestep
+    mode = min(mode, max_timestep)
+
+    # Generate a random timestep using a triangular distribution
+    timestep = torch.from_numpy(np.random.triangular(min_timestep, mode, max_timestep, size=b_size)).long()
+
+    if schedule_timesteps.current_step >= schedule_timesteps.max_calls_split:
+        schedule_timesteps.current_step = 0
+    schedule_timesteps.current_step += 1
+
+    return timestep
+
+
 def get_timesteps_and_huber_c(args, min_timestep, max_timestep, noise_scheduler, b_size, device):
 
     # TODO: if a huber loss is selected, it will use constant timesteps for each batch
     # as. In the future there may be a smarter way
 
     if args.loss_type == "huber" or args.loss_type == "smooth_l1":
-        timesteps = torch.randint(min_timestep, max_timestep, (1,), device="cpu")
+        if args.timestep_weight:
+            timesteps = torch.from_numpy(np.random.triangular(
+                min_timestep, args.timestep_weight, max_timestep, size=(1,))).long().to("cpu")
+        elif args.scheduled_timesteps:
+            timesteps = schedule_timesteps(
+                noise_scheduler.config.num_train_timesteps, min_timestep, max_timestep, args.lr_scheduler_num_cycles, (1,)).to("cpu")
+        else:
+            timesteps = torch.randint(min_timestep, max_timestep, (1,), device="cpu")
         timestep = timesteps.item()
 
         if args.huber_schedule == "exponential":
@@ -4901,7 +4944,14 @@ def get_timesteps_and_huber_c(args, min_timestep, max_timestep, noise_scheduler,
 
         timesteps = timesteps.repeat(b_size).to(device)
     elif args.loss_type == "l2":
-        timesteps = torch.randint(min_timestep, max_timestep, (b_size,), device=device)
+        if args.timestep_weight:
+            timesteps = torch.from_numpy(np.random.triangular(
+                min_timestep, args.timestep_weight, max_timestep, size=(b_size,))).long().to(device)
+        elif args.schedule_timesteps:
+            timesteps = schedule_timesteps(
+                noise_scheduler.config.num_train_timesteps, min_timestep, max_timestep, args.lr_scheduler_num_cycles, (b_size,)).to(device)
+        else:
+            timesteps = torch.randint(min_timestep, max_timestep, (b_size,), device=device)
         huber_c = 1  # may be anything, as it's not used
     else:
         raise NotImplementedError(f"Unknown loss type {args.loss_type}")
