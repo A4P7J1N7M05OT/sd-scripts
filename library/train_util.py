@@ -4133,8 +4133,8 @@ def add_training_arguments(parser: argparse.ArgumentParser, support_dreambooth: 
         "--loss_type",
         type=str,
         default="l2",
-        choices=["l1", "l2", "huber", "smooth_l1"],
-        help="The type of loss function to use (L1, L2, Huber, or smooth L1), default is L2 / 使用する損失関数の種類（L1、L2、Huber、またはsmooth L1）、デフォルトはL2",
+        choices=["l1", "l2", "contrastive_gaussian_mse", "huber", "smooth_l1"],
+        help="The type of loss function to use (L1, L2, contrastive_gaussian_mse, Huber, or smooth L1), default is L2 / 使用する損失関数の種類（L1、L2、contrastive_gaussian_mse, Huber、またはsmooth L1）、デフォルトはL2",
     )
     parser.add_argument(
         "--huber_schedule",
@@ -4616,8 +4616,8 @@ def add_dataset_arguments(
         "--resize_interpolation",
         type=str,
         default=None,
-        choices=["lanczos", "nearest", "bilinear", "linear", "bicubic", "cubic", "area"],
-        help="Resize interpolation when required. Default: area Options: lanczos, nearest, bilinear, bicubic, area / 必要に応じてサイズ補間を変更します。デフォルト: area オプション: lanczos, nearest, bilinear, bicubic, area",
+        choices=["lanczos", "lanczos_multistep", "nearest", "bilinear", "linear", "bicubic", "cubic", "area"],
+        help="Resize interpolation when required. Default: area Options: lanczos, lanczos_multistep, nearest, bilinear, bicubic, area / 必要に応じてサイズ補間を変更します。デフォルト: area オプション: lanczos, lanczos_multistep, nearest, bilinear, bicubic, area",
     )
     parser.add_argument(
         "--token_warmup_min",
@@ -6156,6 +6156,17 @@ def conditional_loss(
         # Reshape huber_c to broadcast with model_pred (supports 4D and 5D tensors)
         huber_c = huber_c.view(-1, *([1] * (model_pred.ndim - 1)))
         loss = 2 * (torch.sqrt((model_pred - target) ** 2 + huber_c**2) - huber_c)
+        if reduction == "mean":
+            loss = torch.mean(loss)
+        elif reduction == "sum":
+            loss = torch.sum(loss)
+    elif loss_type == "contrastive_gaussian_mse":
+        loss_standard = torch.nn.functional.mse_loss(model_pred, target)
+        blur_sigma = random.uniform(0.5, 2.0)
+        blur_kernel = random.randrange(3, 7+1, 2)
+        target_contrast = transforms.v2.functional.gaussian_blur(target, kernel_size=[blur_kernel, blur_kernel], sigma=[blur_sigma, blur_sigma])
+        loss_contrast = torch.nn.functional.mse_loss(model_pred, target_contrast)
+        loss = loss_standard + (0.1 * loss_contrast) # TODO make weight configurable in args
         if reduction == "mean":
             loss = torch.mean(loss)
         elif reduction == "sum":

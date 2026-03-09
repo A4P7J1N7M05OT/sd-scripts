@@ -256,6 +256,12 @@ def resize_image(
         interpolation = get_pil_interpolation(resize_interpolation)
         image = pil_resize(image, resized_size, interpolation=interpolation)
         logger.debug(f"resize image using {resize_interpolation} (PIL)")
+    elif interpolation == "lanczos_multistep": 
+        while height > resized_height*2 and width > resized_width*2:
+            height //= 2
+            width //= 2
+            downscaled_cv_img = cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA)
+        image = cv2.resize(downscaled_cv_img, resized_size, interpolation=cv2.INTER_LANCZOS4)
     else:
         interpolation = get_cv2_interpolation(resize_interpolation)
         image = cv2.resize(image, resized_size, interpolation=interpolation)
