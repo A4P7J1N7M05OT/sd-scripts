@@ -337,7 +337,7 @@ def validate_interpolation_fn(interpolation_str: str) -> bool:
     """
     Check if a interpolation function is supported
     """
-    return interpolation_str in ["lanczos", "nearest", "bilinear", "linear", "bicubic", "cubic", "area", "box"]
+    return interpolation_str in ["lanczos", "lanczos_multistep", "nearest", "bilinear", "linear", "bicubic", "cubic", "area", "box"]
 
 
 # endregion
