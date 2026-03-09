@@ -230,7 +230,7 @@ def resize_image(
         height: int Original image height
         resized_width: int Resized image width
         resized_height: int Resized image height
-        resize_interpolation: Optional[str] Resize interpolation method "lanczos", "area", "bilinear", "bicubic", "nearest", "box"
+        resize_interpolation: Optional[str] Resize interpolation method "lanczos", "lanczos_multistep", "area", "bilinear", "bicubic", "nearest", "box"
 
     Returns:
         image
@@ -256,7 +256,7 @@ def resize_image(
         interpolation = get_pil_interpolation(resize_interpolation)
         image = pil_resize(image, resized_size, interpolation=interpolation)
         logger.debug(f"resize image using {resize_interpolation} (PIL)")
-    elif interpolation == "lanczos_multistep": 
+    elif resize_interpolation == "lanczos_multistep":
         while height > resized_height*2 and width > resized_width*2:
             height //= 2
             width //= 2
