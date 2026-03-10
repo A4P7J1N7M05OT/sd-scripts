@@ -4616,8 +4616,8 @@ def add_dataset_arguments(
         "--resize_interpolation",
         type=str,
         default=None,
-        choices=["lanczos", "lanczos_multistep", "nearest", "bilinear", "linear", "bicubic", "cubic", "area"],
-        help="Resize interpolation when required. Default: area Options: lanczos, lanczos_multistep, nearest, bilinear, bicubic, area / 必要に応じてサイズ補間を変更します。デフォルト: area オプション: lanczos, lanczos_multistep, nearest, bilinear, bicubic, area",
+        choices=["lanczos", "multistep", "mk2021", "nearest", "bilinear", "linear", "bicubic", "cubic", "area"],
+        help="Resize interpolation when required. Default: area Options: lanczos, multistep, nearest, bilinear, bicubic, area / 必要に応じてサイズ補間を変更します。デフォルト: area オプション: lanczos, multistep, nearest, bilinear, bicubic, area",
     )
     parser.add_argument(
         "--token_warmup_min",

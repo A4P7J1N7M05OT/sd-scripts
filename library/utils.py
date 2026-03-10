@@ -12,6 +12,7 @@ from diffusers.schedulers.scheduling_euler_ancestral_discrete import EulerAncest
 import cv2
 from PIL import Image
 import numpy as np
+import pyvips
 
 
 def fire_in_thread(f, *args, **kwargs):
@@ -212,6 +213,28 @@ def pil_resize(image, size, interpolation):
 
     return resized_cv2
 
+def vips_resize(image, size):
+    has_alpha = image.shape[2] == 4 if len(image.shape) == 3 else False
+
+    if has_alpha:
+        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGRA2RGBA)
+        bands = 4
+    else:
+        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        bands = 3
+
+    height, width = rgb_image.shape[:2]
+    vips_image = pyvips.Image.new_from_memory(rgb_image.tobytes(), width, height, bands, "uchar")
+
+    target_width, target_height = size
+    vips_image = vips_image.resize(target_width / width, vscale=target_height / height, kernel=pyvips.enums.Kernel.MKS2021)
+
+    resized_np = np.ndarray(buffer=vips_image.write_to_memory(), dtype=np.uint8, shape=(vips_image.height, vips_image.width, bands))
+
+    if has_alpha:
+        return cv2.cvtColor(resized_np, cv2.COLOR_RGBA2BGRA)
+    else:
+        return cv2.cvtColor(resized_np, cv2.COLOR_RGB2BGR)
 
 def resize_image(
     image: np.ndarray,
@@ -230,7 +253,7 @@ def resize_image(
         height: int Original image height
         resized_width: int Resized image width
         resized_height: int Resized image height
-        resize_interpolation: Optional[str] Resize interpolation method "lanczos", "lanczos_multistep", "area", "bilinear", "bicubic", "nearest", "box"
+        resize_interpolation: Optional[str] Resize interpolation method "lanczos", "multistep", "mk2021", "area", "bilinear", "bicubic", "nearest", "box"
 
     Returns:
         image
@@ -256,12 +279,15 @@ def resize_image(
         interpolation = get_pil_interpolation(resize_interpolation)
         image = pil_resize(image, resized_size, interpolation=interpolation)
         logger.debug(f"resize image using {resize_interpolation} (PIL)")
-    elif resize_interpolation == "lanczos_multistep":
+    elif resize_interpolation == "multistep":
         while height > resized_height*2 and width > resized_width*2:
             height //= 2
             width //= 2
             image = cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA)
-        image = cv2.resize(image, resized_size, interpolation=cv2.INTER_LANCZOS4)
+        image = cv2.resize(image, resized_size, interpolation=cv2.INTER_CUBIC)
+    elif resize_interpolation == "mk2021":
+        image = vips_resize(image, resized_size)
+        logger.debug(f"resize image using {resize_interpolation} (pyvips)")
     else:
         interpolation = get_cv2_interpolation(resize_interpolation)
         image = cv2.resize(image, resized_size, interpolation=interpolation)
@@ -337,7 +363,7 @@ def validate_interpolation_fn(interpolation_str: str) -> bool:
     """
     Check if a interpolation function is supported
     """
-    return interpolation_str in ["lanczos", "lanczos_multistep", "nearest", "bilinear", "linear", "bicubic", "cubic", "area", "box"]
+    return interpolation_str in ["lanczos", "multistep", "mk2021", "nearest", "bilinear", "linear", "bicubic", "cubic", "area", "box"]
 
 
 # endregion
