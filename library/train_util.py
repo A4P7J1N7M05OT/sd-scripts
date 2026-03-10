@@ -6166,7 +6166,7 @@ def conditional_loss(
         blur_kernel = random.randrange(3, 7+1, 2)
         target_contrast = transforms.v2.functional.gaussian_blur(target, kernel_size=[blur_kernel, blur_kernel], sigma=[blur_sigma, blur_sigma])
         loss_contrast = torch.nn.functional.mse_loss(model_pred, target_contrast)
-        loss = loss_standard + (0.1 * loss_contrast) # TODO make weight configurable in args
+        loss = loss_standard + (-0.1 * loss_contrast) # TODO make weight configurable in args
         if reduction == "mean":
             loss = torch.mean(loss)
         elif reduction == "sum":
