@@ -4139,7 +4139,7 @@ def add_training_arguments(parser: argparse.ArgumentParser, support_dreambooth: 
     parser.add_argument(
         "--contrastive_gaussian_mse_weight",
         type=float,
-        default=0.01,
+        default=-0.01,
         help="Set the strength of the counter weight.",
     )
     parser.add_argument(
