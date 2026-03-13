@@ -4137,6 +4137,12 @@ def add_training_arguments(parser: argparse.ArgumentParser, support_dreambooth: 
         help="The type of loss function to use (L1, L2, contrastive_gaussian_mse, Huber, or smooth L1), default is L2 / 使用する損失関数の種類（L1、L2、contrastive_gaussian_mse, Huber、またはsmooth L1）、デフォルトはL2",
     )
     parser.add_argument(
+        "--contrastive_gaussian_mse_weight",
+        type=float,
+        default=0.01,
+        help="Set the strength of the counter weight.",
+    )
+    parser.add_argument(
         "--huber_schedule",
         type=str,
         default="snr",
@@ -6131,16 +6137,16 @@ def get_huber_threshold_if_needed(args, timesteps: torch.Tensor, noise_scheduler
 
 
 def conditional_loss(
-    model_pred: torch.Tensor, target: torch.Tensor, loss_type: str, reduction: str, huber_c: Optional[torch.Tensor] = None
+    model_pred: torch.Tensor, target: torch.Tensor, args: argparse.Namespace, reduction: str, huber_c: Optional[torch.Tensor] = None
 ):
     """
     NOTE: if you're using the scheduled version, huber_c has to depend on the timesteps already
     """
-    if loss_type == "l2":
+    if args.loss_type == "l2":
         loss = torch.nn.functional.mse_loss(model_pred, target, reduction=reduction)
-    elif loss_type == "l1":
+    elif args.loss_type == "l1":
         loss = torch.nn.functional.l1_loss(model_pred, target, reduction=reduction)
-    elif loss_type == "huber":
+    elif args.loss_type == "huber":
         if huber_c is None:
             raise NotImplementedError("huber_c not implemented correctly")
         # Reshape huber_c to broadcast with model_pred (supports 4D and 5D tensors)
@@ -6150,7 +6156,7 @@ def conditional_loss(
             loss = torch.mean(loss)
         elif reduction == "sum":
             loss = torch.sum(loss)
-    elif loss_type == "smooth_l1":
+    elif args.loss_type == "smooth_l1":
         if huber_c is None:
             raise NotImplementedError("huber_c not implemented correctly")
         # Reshape huber_c to broadcast with model_pred (supports 4D and 5D tensors)
@@ -6160,19 +6166,19 @@ def conditional_loss(
             loss = torch.mean(loss)
         elif reduction == "sum":
             loss = torch.sum(loss)
-    elif loss_type == "contrastive_gaussian_mse":
+    elif args.loss_type == "contrastive_gaussian_mse":
         loss_standard = torch.nn.functional.mse_loss(model_pred, target)
         blur_sigma = random.uniform(0.5, 2.0)
         blur_kernel = random.randrange(3, 7+1, 2)
         target_contrast = transforms.v2.functional.gaussian_blur(target, kernel_size=[blur_kernel, blur_kernel], sigma=[blur_sigma, blur_sigma])
         loss_contrast = torch.nn.functional.mse_loss(model_pred, target_contrast)
-        loss = loss_standard + (-0.1 * loss_contrast) # TODO make weight configurable in args
+        loss = loss_standard + (args.contrastive_gaussian_mse_weight * loss_contrast)
         if reduction == "mean":
             loss = torch.mean(loss)
         elif reduction == "sum":
             loss = torch.sum(loss)
     else:
-        raise NotImplementedError(f"Unsupported Loss Type: {loss_type}")
+        raise NotImplementedError(f"Unsupported Loss Type: {args.loss_type}")
     return loss
 
 
