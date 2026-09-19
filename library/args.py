@@ -519,8 +519,14 @@ def add_training_arguments(parser: argparse.ArgumentParser, support_dreambooth: 
         "--loss_type",
         type=str,
         default="l2",
-        choices=["l1", "l2", "huber", "smooth_l1"],
-        help="The type of loss function to use (L1, L2, Huber, or smooth L1), default is L2 / 使用する損失関数の種類（L1、L2、Huber、またはsmooth L1）、デフォルトはL2",
+        choices=["l1", "l2", "contrastive_gaussian_mse", "huber", "smooth_l1"],
+        help="The type of loss function to use (L1, L2, contrastive_gaussian_mse, Huber, or smooth L1), default is L2 / 使用する損失関数の種類（L1、L2、contrastive_gaussian_mse、Huber、またはsmooth L1）、デフォルトはL2",
+    )
+    parser.add_argument(
+        "--contrastive_gaussian_mse_weight",
+        type=float,
+        default=-0.01,
+        help="Set the strength of the counter weight.",
     )
     parser.add_argument(
         "--huber_schedule",
@@ -1043,8 +1049,8 @@ def add_dataset_arguments(
         "--resize_interpolation",
         type=str,
         default=None,
-        choices=["lanczos", "nearest", "bilinear", "linear", "bicubic", "cubic", "area"],
-        help="Resize interpolation when required. Default: area Options: lanczos, nearest, bilinear, bicubic, area / 必要に応じてサイズ補間を変更します。デフォルト: area オプション: lanczos, nearest, bilinear, bicubic, area",
+        choices=["lanczos", "multistep", "mk2021", "nearest", "bilinear", "linear", "bicubic", "cubic", "area"],
+        help="Resize interpolation when required. Default: area Options: lanczos, multistep, mk2021, nearest, bilinear, bicubic, area / 必要に応じてサイズ補間を変更します。デフォルト: area オプション: lanczos, multistep, mk2021, nearest, bilinear, bicubic, area",
     )
     parser.add_argument(
         "--token_warmup_min",

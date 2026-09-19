@@ -9,17 +9,20 @@ trainer:
   variants applied).
 - :func:`get_huber_threshold_if_needed` — per-timestep Huber/Smooth-L1
   threshold schedule (exponential / SNR / constant).
-- :func:`conditional_loss` — dispatch over ``l2 / l1 / huber / smooth_l1``.
+- :func:`conditional_loss` — dispatch over ``l2 / l1 / contrastive_gaussian_mse / huber / smooth_l1``.
 
 These used to live in ``library.train_util`` and are still re-exported
 from there for backward compatibility. New code should import from this
 module.
 """
 
+import argparse
 import math
+import random
 from typing import Optional, Tuple
 
 import torch
+from torchvision import transforms
 
 from library import custom_train_functions
 
@@ -96,16 +99,16 @@ def get_huber_threshold_if_needed(args, timesteps: torch.Tensor, noise_scheduler
 
 
 def conditional_loss(
-    model_pred: torch.Tensor, target: torch.Tensor, loss_type: str, reduction: str, huber_c: Optional[torch.Tensor] = None
+    model_pred: torch.Tensor, target: torch.Tensor, args: argparse.Namespace, reduction: str, huber_c: Optional[torch.Tensor] = None
 ):
     """
     NOTE: if you're using the scheduled version, huber_c has to depend on the timesteps already
     """
-    if loss_type == "l2":
+    if args.loss_type == "l2":
         loss = torch.nn.functional.mse_loss(model_pred, target, reduction=reduction)
-    elif loss_type == "l1":
+    elif args.loss_type == "l1":
         loss = torch.nn.functional.l1_loss(model_pred, target, reduction=reduction)
-    elif loss_type == "huber":
+    elif args.loss_type == "huber":
         if huber_c is None:
             raise NotImplementedError("huber_c not implemented correctly")
         # Reshape huber_c to broadcast with model_pred (supports 4D and 5D tensors)
@@ -115,7 +118,7 @@ def conditional_loss(
             loss = torch.mean(loss)
         elif reduction == "sum":
             loss = torch.sum(loss)
-    elif loss_type == "smooth_l1":
+    elif args.loss_type == "smooth_l1":
         if huber_c is None:
             raise NotImplementedError("huber_c not implemented correctly")
         # Reshape huber_c to broadcast with model_pred (supports 4D and 5D tensors)
@@ -125,6 +128,19 @@ def conditional_loss(
             loss = torch.mean(loss)
         elif reduction == "sum":
             loss = torch.sum(loss)
+    elif args.loss_type == "contrastive_gaussian_mse":
+        loss_standard = torch.nn.functional.mse_loss(model_pred, target)
+        blur_sigma = random.uniform(0.5, 2.0)
+        blur_kernel = random.randrange(3, 7 + 1, 2)
+        target_contrast = transforms.v2.functional.gaussian_blur(
+            target, kernel_size=[blur_kernel, blur_kernel], sigma=[blur_sigma, blur_sigma]
+        )
+        loss_contrast = torch.nn.functional.mse_loss(model_pred, target_contrast)
+        loss = loss_standard + (args.contrastive_gaussian_mse_weight * loss_contrast)
+        if reduction == "mean":
+            loss = torch.mean(loss)
+        elif reduction == "sum":
+            loss = torch.sum(loss)
     else:
-        raise NotImplementedError(f"Unsupported Loss Type: {loss_type}")
+        raise NotImplementedError(f"Unsupported Loss Type: {args.loss_type}")
     return loss

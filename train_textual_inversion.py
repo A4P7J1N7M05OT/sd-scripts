@@ -628,7 +628,7 @@ class TextualInversionTrainer:
                         target = noise
 
                     huber_c = loss_util.get_huber_threshold_if_needed(args, timesteps, noise_scheduler)
-                    loss = loss_util.conditional_loss(noise_pred.float(), target.float(), args.loss_type, "none", huber_c)
+                    loss = loss_util.conditional_loss(noise_pred.float(), target.float(), args, "none", huber_c)
                     if args.masked_loss or ("alpha_masks" in batch and batch["alpha_masks"] is not None):
                         loss = apply_masked_loss(loss, batch)
                     loss = loss.mean([1, 2, 3])
